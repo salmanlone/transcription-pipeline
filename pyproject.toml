@@ -1,0 +1,36 @@
+[project]
+name = "transcriber"
+version = "0.1.0"
+description = "Audio file in -> timestamped transcript out (JSON / SRT / text), via CLI or HTTP API"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# a crash inside a test thread must fail the run, not just print a warning
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# tests use small inline fakes and late helper imports grouped by topic
+"tests/*" = ["E402", "B011"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["transcriber"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ["faster_whisper.*", "ctranslate2.*"]
+ignore_missing_imports = true

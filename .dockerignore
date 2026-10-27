@@ -1,0 +1,19 @@
+# only requirements.txt and transcriber/ are copied into the image
+.git
+.github
+.venv
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.qodo
+.DS_Store
+tests
+tools
+deploy
+answers
+*.md
+*.mp3
+*.aiff
+*.wav
+result.*

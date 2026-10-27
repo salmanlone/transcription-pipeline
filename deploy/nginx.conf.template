@@ -1,0 +1,22 @@
+# Generated from MAX_UPLOAD_MB by deploy/render_nginx.py - do not edit the size by hand.
+upstream transcription_api {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 80;
+
+    # Must equal the app's request cap (MAX_UPLOAD_MB + 1 MiB multipart overhead).
+    client_max_body_size {{CLIENT_MAX_BODY_SIZE}};
+
+    # Stream uploads straight to the app instead of buffering whole files in nginx.
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;           # long files take a while to transcribe
+
+    location / {
+        proxy_pass http://transcription_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;   # same id in nginx and app logs
+    }
+}
