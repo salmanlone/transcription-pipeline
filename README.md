@@ -3,7 +3,41 @@
 Audio file in, transcript with per-segment timestamps out (JSON, SRT subtitles or plain text), through a CLI or an
 HTTP API. Built on [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and ffmpeg.
 
-**Design, decisions and measurements: [DESIGN.md](DESIGN.md).**
+**Full design, rejected alternatives and measurements: [DESIGN.md](DESIGN.md).**
+
+## Design decisions
+
+The guiding rule: do the cheapest check first, bound every resource, make every failure explicit, and measure
+instead of guessing.
+
+```
+upload ─► cheap checks ─► fair queue ─► ffprobe check ─► ffmpeg to 16 kHz mono WAV ─► 10-min chunks
+       (type, size, options)  (2 run, 10 wait)                                          │
+JSON / SRT / text ◄── merge: file-wide times, drop overlap repeats and weak text ◄── faster-whisper per chunk
+```
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| **faster-whisper** (open-source Whisper on CTranslate2), model size as a parameter, default `small` | Its maintainers report up to 4x faster than openai-whisper with comparable accuracy; int8 on CPU, GPU when available; built-in silence filter | Accuracy depends on model size; GPU path not tested on real hardware |
+| **Convert every format once with ffmpeg** to 16 kHz mono 16-bit WAV | One format for everything after it; a new format is a list entry; exact, fast chunk cuts | One extra pass over the audio |
+| **Cheapest checks first**: extension (415), model/language (422), size (413), then real content with ffprobe (422) | Bad requests cost almost nothing; expensive work only for valid files | The extension alone proves nothing, so the content check is required |
+| **Lock down ffmpeg**: only our audio formats, local files only, a timeout on every call | I reproduced an attack: a fake `.mp3` that is really a playlist made ffmpeg read another file on the server | A new format needs its ffmpeg reader name added |
+| **10-minute chunks with 2 s overlap** for long audio | The engine loads its whole input into memory (about 230 MB per hour); chunks keep it to about 38 MB | A segment crossing a cut can repeat a few words |
+| **Merge rule**: chunk times become file times; a segment mostly inside already-covered audio is a repeat; times only move forward | Ordered, valid timestamps without needing word-level times | Segment-level, not word-level |
+| **Clean output for downstream use**: drop empty and silence-like text, keep confidence scores, JSON / SRT / text | Other systems get clean data and can still flag doubtful parts | Confidence thresholds are defaults, not tuned on real data |
+| **Model pool**: at most one model in memory, never removed while in use | A plain cache can briefly hold two large models | A little concurrency code, covered by tests |
+| **Fair FIFO job queue** per worker (2 running, 10 waiting, then 503 + Retry-After) | Load test: a burst of 20 doubled throughput (1.03 to 2.12 jobs/s) with no client retries | Per process and in memory |
+| **Synchronous API for now** | One node, no message broker to run; the queue is one replaceable component | Long files hold a connection open |
+| **Only bad input is a client error** (422); anything else is 500 | A bug is never blamed on the client | Rejecting code must raise the specific error type |
+| **Request id on every log line**, one summary line per job, transcript text never logged | Any request can be traced; transcripts can be private | None worth noting |
+
+**Measured** (laptop CPU, Apple M3 Pro): the default `small` model runs at about 1.5x real time (80 s of speech in
+52 s, 1.2 GB memory). Running more jobs at once on one worker did not add speed, so capacity comes from more
+machines or GPUs.
+
+**Known limits and next steps:** the API is synchronous and the queue lives in one process, so the next step is an
+async job API (upload to object storage, a durable shared queue, GPU workers, poll or webhook) with per-chunk
+retries. Then word-level timestamps, audio track selection, authentication and rate limits.
 
 ## Quick start
 
