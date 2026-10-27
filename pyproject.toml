@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]   # import the transcriber package from the repo root, however pytest is started
 # a crash inside a test thread must fail the run, not just print a warning
 filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]
 
